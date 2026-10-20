@@ -12,7 +12,7 @@ Four supplier invoices as PDF. All invented: companies, numbers and amounts come
 
 ## 2 · The workflow
 
-![Workflow diagram](example-output/workflow.png)
+![The workflow in n8n 2.32.6](example-output/n8n-canvas.png)
 
 1. **Read invoices**: every PDF in the folder.
 2. **Extract text** from each PDF.
@@ -49,7 +49,7 @@ Needs Docker, Node and Python with `reportlab` and `pillow`. From the repo root:
 python demo-01-invoice-to-sheet/make_samples.py   # sample PDFs + PNG previews
 sh demo-01-invoice-to-sheet/run-local.sh           # builds workflow.json and runs it in a throwaway n8n container
 node demo-01-invoice-to-sheet/test.js              # parser tests + check of the last n8n run
-node tools/render-visuals.js                       # workflow diagram and spreadsheet preview images
+node tools/render-visuals.js                       # spreadsheet preview image
 ```
 
 The container has no network access and can only touch `/demo`. Tested with n8n 2.32.6.

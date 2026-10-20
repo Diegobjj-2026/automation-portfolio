@@ -10,7 +10,7 @@
 
 ## 2 · The workflow
 
-![Workflow diagram](example-output/workflow.png)
+![The workflow in n8n 2.32.6](example-output/n8n-canvas.png)
 
 1. **Read inbox** and **Split emails**: one item per email.
 2. **Build model request**: the instructions and a strict JSON schema, so the model can only answer with a category from the list, an urgency, a summary, a "needs a person" flag and a draft.

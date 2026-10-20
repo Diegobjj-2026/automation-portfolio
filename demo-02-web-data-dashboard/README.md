@@ -4,7 +4,7 @@
 
 **What this n8n workflow does:**
 
-![Workflow diagram](example-output/workflow.png)
+![The workflow in n8n 2.32.6](example-output/n8n-canvas.png)
 
 1. Visits the first 5 catalogue pages of [books.toscrape.com](http://books.toscrape.com), a public site built for scraping practice, one request per second.
 2. Reads title, price, star rating and stock for each book; converts "Three" stars to `3` and "£51.77" to `51.77`.
