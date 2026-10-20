@@ -1,0 +1,2 @@
+﻿File,Supplier,Invoice no.,Invoice date,Net (EUR),VAT %,VAT (EUR),Total (EUR),Status,What to check
+inv-2026-0144.pdf,Granite & Stone Depot,GSD-0907,2026-10-14,675,,,675,NEEDS REVIEW,missing VAT rate; missing VAT amount

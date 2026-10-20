@@ -1,0 +1,251 @@
+{
+  "id": "Demo01InvoiceToSheet",
+  "name": "Demo 01 · Invoice PDFs to spreadsheet (synthetic data)",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "executionTimeout": 120
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "read",
+      "name": "Read invoices",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/demo/samples/*.pdf",
+        "options": {}
+      }
+    },
+    {
+      "id": "extract",
+      "name": "Extract text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "parse",
+      "name": "Parse invoice fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Parse invoice fields\" (mode: run once for all items).\n// Input: one item per PDF from \"Extract text\", with the text in json.text.\n// Output: one spreadsheet row per invoice, with readable column names, a Status and a plain\n// \"What to check\" so a person reviews anything incomplete. Nothing is guessed.\n// build-workflow.js inlines this file into workflow.json; test.js runs it with a fake $input.\n\nconst files = $('Read invoices').all();\n\nconst FIELDS = [\n  ['supplier', 'Supplier'],\n  ['invoice_number', 'Invoice no.'],\n  ['invoice_date', 'Invoice date'],\n  ['net', 'Net (EUR)'],\n  ['vat_rate', 'VAT %'],\n  ['vat', 'VAT (EUR)'],\n  ['total', 'Total (EUR)'],\n];\nconst CHECK = {\n  supplier: 'supplier name', invoice_number: 'invoice number', invoice_date: 'invoice date',\n  net: 'net amount', vat_rate: 'VAT rate', vat: 'VAT amount', total: 'total',\n};\n\nfunction find(text, re) {\n  const m = text.match(re);\n  return m ? m[1].trim() : null;\n}\n\nfunction amount(text, re) {\n  const raw = find(text, re);\n  return raw === null ? null : Number(raw.replace(/,/g, ''));\n}\n\nreturn $input.all().map((item, i) => {\n  const text = item.json.text || '';\n  const v = {\n    supplier: (text.split('\\n').map(l => l.trim()).find(Boolean)) || null,\n    invoice_number: find(text, /Invoice number:\\s*(\\S+)/i),\n    invoice_date: find(text, /Invoice date:\\s*(\\d{4}-\\d{2}-\\d{2})/i),\n    net: amount(text, /Net amount:\\s*([\\d,]+\\.\\d{2})/i),\n    vat_rate: amount(text, /VAT\\s*(\\d+(?:\\.\\d+)?)%/i),\n    vat: amount(text, /VAT\\s*\\d+(?:\\.\\d+)?%:\\s*([\\d,]+\\.\\d{2})/i),\n    total: amount(text, /Total:\\s*([\\d,]+\\.\\d{2})/i),\n  };\n  const missing = Object.keys(CHECK).filter(k => v[k] === null).map(k => `missing ${CHECK[k]}`);\n  if (missing.length === 0 && Math.abs(v.net + v.vat - v.total) > 0.01) {\n    missing.push('net + VAT does not equal total');\n  }\n  const row = { File: files[i]?.binary?.data?.fileName ?? `invoice-${i + 1}.pdf` };\n  for (const [key, label] of FIELDS) row[label] = v[key] ?? '';\n  row.Status = missing.length ? 'NEEDS REVIEW' : 'OK';\n  row['What to check'] = missing.join('; ');\n  return { json: row };\n});\n"
+      }
+    },
+    {
+      "id": "to-xlsx",
+      "name": "Rows to spreadsheet",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -120
+      ],
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "fileName": "invoices.xlsx",
+          "headerRow": true,
+          "sheetName": "Invoices"
+        }
+      }
+    },
+    {
+      "id": "save-xlsx",
+      "name": "Save spreadsheet",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        -120
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/demo/output/invoices.xlsx",
+        "options": {}
+      }
+    },
+    {
+      "id": "needs-review",
+      "name": "Needs review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "review",
+              "leftValue": "={{ $json.Status }}",
+              "rightValue": "NEEDS REVIEW",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "to-csv",
+      "name": "Review list to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        120
+      ],
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "needs-review.csv",
+          "headerRow": true
+        }
+      }
+    },
+    {
+      "id": "save-csv",
+      "name": "Save review list",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/demo/output/needs-review.csv",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read invoices": {
+      "main": [
+        [
+          {
+            "node": "Extract text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text": {
+      "main": [
+        [
+          {
+            "node": "Parse invoice fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse invoice fields": {
+      "main": [
+        [
+          {
+            "node": "Rows to spreadsheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Needs review?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rows to spreadsheet": {
+      "main": [
+        [
+          {
+            "node": "Save spreadsheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs review?": {
+      "main": [
+        [
+          {
+            "node": "Review list to CSV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Review list to CSV": {
+      "main": [
+        [
+          {
+            "node": "Save review list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,302 @@
+{
+  "id": "Demo03EmailTriageAgent",
+  "name": "Demo 03 · Email triage agent with human approval (synthetic emails)",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "executionTimeout": 300
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "read",
+      "name": "Read inbox",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/demo/samples/emails.json",
+        "options": {}
+      }
+    },
+    {
+      "id": "split",
+      "name": "Split emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Split emails\" (mode: run once for all items).\n// Input: the emails.json file read from disk (binary \"data\"). Output: one item per email.\n// The \"expected\" answer that test.js uses to grade the run is removed here, so the model never sees it.\n\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst emails = JSON.parse(buffer.toString('utf8'));\n\nreturn emails.map(({ id, from, subject, body }) => ({ json: { id, from, subject, body } }));\n"
+      }
+    },
+    {
+      "id": "build",
+      "name": "Build model request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Build model request\" (mode: run once for all items).\n// Input: one email per item. Output: the same email plus json.request, the Chat Completions body\n// with a strict JSON schema, so the model can only answer in the agreed shape.\n\nconst MODEL = 'gpt-4.1-mini-2025-04-14';\nconst CATEGORIES = ['quote_request', 'complaint_or_incident', 'scheduling', 'supplier_invoice',\n  'customer_admin', 'spam_or_marketing', 'other'];\n\nconst SYSTEM = `You triage incoming emails for a small renovation company.\nClassify each email into exactly one category:\n- quote_request: someone asks for a price, a visit or a budget for new work.\n- complaint_or_incident: something went wrong: damage, a leak, noise, dust, a complaint about the work or the workers.\n- scheduling: confirm, move or cancel a visit or an appointment.\n- supplier_invoice: an invoice or a statement sent by a supplier.\n- customer_admin: a customer asks for an invoice, a document or a payment detail.\n- spam_or_marketing: unsolicited sales or marketing.\n- other: anything else.\nUrgency: high if there is ongoing damage or a safety risk that needs action today; low for spam or marketing; otherwise normal.\nWrite a one-sentence summary for the office.\nDraft a short, polite reply in the same language as the email, signed \"The office team\".\nGreet the sender by the first name they sign with; if there is none, write \"Hello\". Never guess a title or gender (no Mr, Mrs, Ms, Sir, Madam).\nNever promise prices, dates, amounts or responsibility for damage: write placeholders such as [date], [time] or [price] where a person must decide.\nFor spam_or_marketing the reply_draft is an empty string.\nneeds_human is true for complaint_or_incident, for anything with high urgency, and whenever you are unsure.`;\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  required: ['category', 'urgency', 'summary', 'needs_human', 'reply_draft'],\n  properties: {\n    category: { type: 'string', enum: CATEGORIES },\n    urgency: { type: 'string', enum: ['high', 'normal', 'low'] },\n    summary: { type: 'string' },\n    needs_human: { type: 'boolean' },\n    reply_draft: { type: 'string' },\n  },\n};\n\nreturn $input.all().map(({ json: email }) => ({\n  json: {\n    ...email,\n    request: {\n      model: MODEL,\n      temperature: 0,\n      messages: [\n        { role: 'system', content: SYSTEM },\n        { role: 'user', content: `From: ${email.from}\\nSubject: ${email.subject}\\n\\n${email.body}` },\n      ],\n      response_format: { type: 'json_schema', json_schema: { name: 'email_triage', strict: true, schema } },\n    },\n  },\n}));\n"
+      }
+    },
+    {
+      "id": "model",
+      "name": "Ask the model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 500
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openaiDemo",
+          "name": "OpenAI (demo)"
+        }
+      }
+    },
+    {
+      "id": "check",
+      "name": "Check model answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Check model answer\" (mode: run once for all items).\n// Input: one Chat Completions response per email, in the same order as \"Build model request\".\n// Output: one row per email. The model's answer is checked against the agreed shape, and the\n// safety rules are applied here in code, not trusted to the model:\n//   - complaints and high urgency always go to a person;\n//   - an answer that does not parse or does not fit becomes category \"other\" and goes to a person;\n//   - nothing is ever sent: every reply is a draft waiting for approval.\n\nconst emails = $('Build model request').all();\nconst CATEGORIES = ['quote_request', 'complaint_or_incident', 'scheduling', 'supplier_invoice',\n  'customer_admin', 'spam_or_marketing', 'other'];\nconst URGENCY = ['high', 'normal', 'low'];\n\nfunction readAnswer(response) {\n  try {\n    const a = JSON.parse(response?.choices?.[0]?.message?.content ?? '');\n    const ok = CATEGORIES.includes(a.category) && URGENCY.includes(a.urgency) &&\n      typeof a.summary === 'string' && typeof a.needs_human === 'boolean' && typeof a.reply_draft === 'string';\n    return ok ? a : null;\n  } catch {\n    return null;\n  }\n}\n\nreturn $input.all().map((item, i) => {\n  const email = emails[i]?.json ?? {};\n  const answer = readAnswer(item.json);\n  const checks = [];\n  let row;\n  if (!answer) {\n    checks.push('model answer did not fit the agreed format');\n    row = { category: 'other', urgency: 'normal', summary: '', needs_human: true, reply_draft: '' };\n  } else {\n    row = { ...answer };\n    if ((row.category === 'complaint_or_incident' || row.urgency === 'high') && !row.needs_human) {\n      row.needs_human = true;\n      checks.push('sent to a person by rule (complaint or high urgency)');\n    }\n  }\n  return {\n    json: {\n      'ID': email.id,\n      'From': email.from,\n      'Subject': email.subject,\n      'Category': row.category,\n      'Urgency': row.urgency,\n      'Needs a person': row.needs_human ? 'yes' : 'no',\n      'Summary': row.summary,\n      'Reply draft': row.reply_draft,\n      'Reply status': row.reply_draft ? 'DRAFT, waiting for approval' : 'no reply',\n      'Checks': checks.join('; '),\n      'Model': item.json?.model ?? '',\n      'Tokens': item.json?.usage?.total_tokens ?? '',\n    },\n  };\n});\n"
+      }
+    },
+    {
+      "id": "to-csv",
+      "name": "Rows to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        -120
+      ],
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "triage.csv",
+          "headerRow": true
+        }
+      }
+    },
+    {
+      "id": "save-csv",
+      "name": "Save triage table",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        -120
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/demo/output/triage.csv",
+        "options": {}
+      }
+    },
+    {
+      "id": "drafts",
+      "name": "Build approval list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Build approval list\" (mode: run once for all items).\n// Input: the checked rows. Output: one item with json.markdown, the list a person reads to approve,\n// edit or discard each draft. Urgent items and items for a person come first.\n\nconst rows = $input.all().map(i => i.json);\nconst rank = r => (r['Urgency'] === 'high' ? 0 : r['Needs a person'] === 'yes' ? 1 : 2);\nconst sorted = [...rows].sort((a, b) => rank(a) - rank(b));\n\nconst lines = [\n  '# Inbox triage: drafts waiting for approval',\n  '',\n  `${rows.length} emails. ${rows.filter(r => r['Needs a person'] === 'yes').length} need a person. Nothing has been sent.`,\n  '',\n];\nfor (const r of sorted) {\n  lines.push(`## ${r['Urgency'] === 'high' ? '🔴 ' : ''}${r['Subject']}`);\n  lines.push('');\n  lines.push(`- **From:** ${r['From']} · **Category:** ${r['Category']} · **Urgency:** ${r['Urgency']} · **Needs a person:** ${r['Needs a person']}`);\n  lines.push(`- **Summary:** ${r['Summary']}`);\n  if (r['Checks']) lines.push(`- **Checks:** ${r['Checks']}`);\n  lines.push('');\n  if (r['Reply draft']) {\n    lines.push('> ' + r['Reply draft'].split('\\n').join('\\n> '));\n    lines.push('');\n    lines.push('*Status: draft, waiting for approval.*');\n  } else {\n    lines.push('*No reply drafted.*');\n  }\n  lines.push('');\n}\n\nreturn [{ json: { markdown: lines.join('\\n') } }];\n"
+      }
+    },
+    {
+      "id": "to-md",
+      "name": "Approval list to file",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        120
+      ],
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "markdown",
+        "options": {
+          "fileName": "drafts-for-approval.md"
+        }
+      }
+    },
+    {
+      "id": "save-md",
+      "name": "Save approval list",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        120
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/demo/output/drafts-for-approval.md",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read inbox": {
+      "main": [
+        [
+          {
+            "node": "Split emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split emails": {
+      "main": [
+        [
+          {
+            "node": "Build model request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build model request": {
+      "main": [
+        [
+          {
+            "node": "Ask the model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask the model": {
+      "main": [
+        [
+          {
+            "node": "Check model answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check model answer": {
+      "main": [
+        [
+          {
+            "node": "Rows to CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build approval list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rows to CSV": {
+      "main": [
+        [
+          {
+            "node": "Save triage table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build approval list": {
+      "main": [
+        [
+          {
+            "node": "Approval list to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval list to file": {
+      "main": [
+        [
+          {
+            "node": "Save approval list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

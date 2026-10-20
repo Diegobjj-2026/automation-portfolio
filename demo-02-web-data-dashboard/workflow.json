@@ -1,0 +1,242 @@
+{
+  "id": "Demo02WebDataDashboard",
+  "name": "Demo 02 · Web data to a clean table and a dashboard (public practice site)",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "executionTimeout": 180
+  },
+  "pinData": {},
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "urls",
+      "name": "Page URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// One item per catalogue page. Change PAGES to collect more.\nconst PAGES = 5;\nreturn Array.from({ length: PAGES }, (_, i) => ({ json: { page: i + 1, url: `http://books.toscrape.com/catalogue/page-${i + 1}.html` } }));\n"
+      }
+    },
+    {
+      "id": "fetch",
+      "name": "Fetch pages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "parse",
+      "name": "Parse and clean books",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Parse and clean books\" (mode: run once for all items).\n// Input: one item per catalogue page from \"Fetch pages\" (HTML in json.data), in the same order as \"Page URLs\".\n// Output: one clean row per book, deduplicated by URL. Blocks that cannot be read are dropped and logged.\n\nconst pages = $('Page URLs').all();\nconst RATING = { One: 1, Two: 2, Three: 3, Four: 4, Five: 5 };\nconst BASE = 'http://books.toscrape.com/catalogue/';\n\nconst seen = new Set();\nconst rows = [];\nlet unreadable = 0;\n\n$input.all().forEach((item, i) => {\n  const html = String(item.json.data || '');\n  const page = pages[i]?.json?.page ?? i + 1;\n  for (const block of html.split('<article class=\"product_pod\">').slice(1)) {\n    const href = block.match(/<h3><a href=\"([^\"]+)\"/);\n    const title = block.match(/<h3><a [^>]*title=\"([^\"]+)\"/);\n    const price = block.match(/class=\"price_color\">[^\\d<]*([\\d.]+)</);\n    const rating = block.match(/class=\"star-rating (\\w+)\"/);\n    if (!href || !title || !price || !rating || !RATING[rating[1]]) { unreadable++; continue; }\n    const url = BASE + href[1].replace(/^(\\.\\.\\/)+(catalogue\\/)?/, '');\n    if (seen.has(url)) continue;\n    seen.add(url);\n    rows.push({\n      title: title[1].replace(/&amp;/g, '&').replace(/&#39;/g, \"'\").replace(/&quot;/g, '\"'),\n      price_gbp: Number(price[1]),\n      rating: RATING[rating[1]],\n      in_stock: /In stock/.test(block),\n      page,\n      url,\n    });\n  }\n});\n\nif (unreadable > 0) console.log(`Parse and clean books: ${unreadable} unreadable blocks dropped`);\nreturn rows.map(r => ({ json: r }));\n"
+      }
+    },
+    {
+      "id": "to-csv",
+      "name": "Rows to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        -120
+      ],
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "books.csv",
+          "headerRow": true
+        }
+      }
+    },
+    {
+      "id": "save-csv",
+      "name": "Save table",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        -120
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/demo/output/books.csv",
+        "options": {}
+      }
+    },
+    {
+      "id": "dash",
+      "name": "Build dashboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Code node \"Build dashboard\" (mode: run once for all items).\n// Input: the clean book rows. Output: one item with a self-contained HTML dashboard in json.html.\n\nconst rows = $input.all().map(i => i.json);\nconst n = rows.length;\nconst avg = a => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0);\nconst esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\nconst gbp = x => `£${x.toFixed(2)}`;\n\nconst inStock = rows.filter(r => r.in_stock).length;\nconst byRating = [5, 4, 3, 2, 1].map(stars => {\n  const group = rows.filter(r => r.rating === stars);\n  return { stars, count: group.length, avg_price: avg(group.map(r => r.price_gbp)) };\n});\nconst bestValue = rows.filter(r => r.rating >= 4 && r.in_stock)\n  .sort((a, b) => a.price_gbp - b.price_gbp).slice(0, 5);\nconst maxCount = Math.max(1, ...byRating.map(g => g.count));\n\nconst kpi = (label, value) => `<div class=\"kpi\"><div class=\"v\">${value}</div><div class=\"l\">${label}</div></div>`;\nconst html = `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>Book catalogue dashboard</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#f6f5f2;color:#1d1d1b}\nmain{max-width:960px;margin:0 auto;padding:32px 16px}h1{font-size:22px;margin:0 0 4px}p.sub{color:#666;margin:0 0 24px;font-size:14px}\n.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}\n.kpi{background:#fff;border-radius:10px;padding:16px;border:1px solid #e6e3dc}.kpi .v{font-size:26px;font-weight:650}.kpi .l{color:#666;font-size:13px}\nsection{background:#fff;border:1px solid #e6e3dc;border-radius:10px;padding:16px;margin-bottom:16px}h2{font-size:15px;margin:0 0 12px}\n.bar{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0}.bar span:first-child{width:56px}.bar .b{height:14px;background:#3b6e8f;border-radius:3px}\ntable{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px 8px;border-bottom:1px solid #eee;text-align:left}th{color:#666;font-weight:600}\n</style></head><body><main>\n<h1>Book catalogue · price and rating overview</h1>\n<p class=\"sub\">Source: books.toscrape.com (a public practice site), ${n} books from the first catalogue pages. Built automatically by n8n.</p>\n<div class=\"kpis\">${kpi('books', n)}${kpi('average price', gbp(avg(rows.map(r => r.price_gbp))))}${kpi('in stock', `${n ? Math.round(100 * inStock / n) : 0}%`)}${kpi('average rating', `${avg(rows.map(r => r.rating)).toFixed(1)} ★`)}</div>\n<section><h2>Books by rating</h2>${byRating.map(g =>\n  `<div class=\"bar\"><span>${'★'.repeat(g.stars)}</span><div class=\"b\" style=\"width:${Math.round(320 * g.count / maxCount)}px\"></div><span>${g.count} · avg ${gbp(g.avg_price)}</span></div>`).join('')}</section>\n<section><h2>Best value: cheapest books rated 4★ or more, in stock</h2><table><tr><th>Title</th><th>Rating</th><th>Price</th></tr>\n${bestValue.map(r => `<tr><td><a href=\"${esc(r.url)}\">${esc(r.title)}</a></td><td>${'★'.repeat(r.rating)}</td><td>${gbp(r.price_gbp)}</td></tr>`).join('')}</table></section>\n</main></body></html>`;\n\nreturn [{ json: { html, books: n, in_stock: inStock, best_value: bestValue.map(r => r.title) } }];\n"
+      }
+    },
+    {
+      "id": "to-html",
+      "name": "Dashboard to file",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        120
+      ],
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "html",
+        "options": {
+          "fileName": "dashboard.html"
+        }
+      }
+    },
+    {
+      "id": "save-html",
+      "name": "Save dashboard",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/demo/output/dashboard.html",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Page URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch pages": {
+      "main": [
+        [
+          {
+            "node": "Parse and clean books",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and clean books": {
+      "main": [
+        [
+          {
+            "node": "Rows to CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rows to CSV": {
+      "main": [
+        [
+          {
+            "node": "Save table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build dashboard": {
+      "main": [
+        [
+          {
+            "node": "Dashboard to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dashboard to file": {
+      "main": [
+        [
+          {
+            "node": "Save dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

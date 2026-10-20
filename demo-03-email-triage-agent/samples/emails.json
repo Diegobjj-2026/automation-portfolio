@@ -1,0 +1,82 @@
+[
+  {
+    "id": "msg-01",
+    "from": "laura.m@example.com",
+    "subject": "Quote for bathroom renovation",
+    "body": "Hello, we would like a quote to renovate a 6 m2 bathroom: remove the bathtub, install a walk-in shower, new tiles and a new sink. The flat is on the second floor with a lift. Could someone visit next week? Thanks, Laura",
+    "expected": {
+      "category": "quote_request",
+      "urgency": null
+    }
+  },
+  {
+    "id": "msg-02",
+    "from": "owner.block7@example.org",
+    "subject": "URGENT water leak from the ceiling",
+    "body": "Since this morning water is dripping from the kitchen ceiling right where your team replaced the pipes last month. It is getting worse and we have put buckets down. Please send someone today.",
+    "expected": {
+      "category": "complaint_or_incident",
+      "urgency": "high"
+    }
+  },
+  {
+    "id": "msg-03",
+    "from": "billing@supplier.example.net",
+    "subject": "Invoice NW-2026-0141",
+    "body": "Please find attached invoice NW-2026-0141 for cement and rebar delivered on 2 October. Payment terms 30 days. Regards, Accounts team",
+    "expected": {
+      "category": "supplier_invoice",
+      "urgency": null
+    }
+  },
+  {
+    "id": "msg-04",
+    "from": "p.ortega@example.com",
+    "subject": "Can we move Thursday's visit?",
+    "body": "Hi, I can't be at home on Thursday morning for the kitchen measurement. Would Friday afternoon or Monday morning work for you? Pablo",
+    "expected": {
+      "category": "scheduling",
+      "urgency": null
+    }
+  },
+  {
+    "id": "msg-05",
+    "from": "growth-team@marketing.example.net",
+    "subject": "Double your leads in 30 days!!!",
+    "body": "We help construction companies get 10x more leads with our guaranteed SEO package. Reply YES to get a free audit worth 2,000 dollars.",
+    "expected": {
+      "category": "spam_or_marketing",
+      "urgency": "low"
+    }
+  },
+  {
+    "id": "msg-06",
+    "from": "a.ruiz@example.com",
+    "subject": "Still waiting for the final invoice",
+    "body": "Good morning, the works finished two weeks ago and we still have not received the final invoice. We need it for our insurance claim before the end of the month. Could you send it?",
+    "expected": {
+      "category": "customer_admin",
+      "urgency": null
+    }
+  },
+  {
+    "id": "msg-07",
+    "from": "m.santos@example.com",
+    "subject": "Quote for full flat renovation, budget question",
+    "body": "We just bought a 90 m2 flat built in 1975 and want to renovate everything: electrics, plumbing, kitchen, two bathrooms and floors. Roughly what budget should we expect, and how long would it take?",
+    "expected": {
+      "category": "quote_request",
+      "urgency": null
+    }
+  },
+  {
+    "id": "msg-08",
+    "from": "neighbour.3b@example.org",
+    "subject": "Noise and dust in the stairwell",
+    "body": "Your workers start drilling at 7:30 and the stairwell is full of dust every day. The building rules say no noise before 9. If this continues I will complain to the building manager.",
+    "expected": {
+      "category": "complaint_or_incident",
+      "urgency": null
+    }
+  }
+]

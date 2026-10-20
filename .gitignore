@@ -1,0 +1,6 @@
+demo-*/output/
+node_modules/
+__pycache__/
+.env
+.env.*
+local/

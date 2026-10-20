@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Gallery cover</title>
+<style>
+  :root { --bg:#f6f5f2; --ink:#1d1d1b; --muted:#5f5d58; --card:#fff; --line:#e3dfd6; --accent:#3b6e8f; --ok:#2f7d4f; --warn:#b5651d; }
+  * { box-sizing:border-box; }
+  body { margin:0; width:1280px; height:769px; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; }
+  .wrap { padding:56px 64px; height:100%; display:flex; flex-direction:column; }
+  .kicker { font-size:20px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); font-weight:650; }
+  h1 { font-size:54px; line-height:1.08; margin:14px 0 10px; max-width:1050px; }
+  .sub { font-size:24px; color:var(--muted); margin:0 0 40px; }
+  .flow { display:flex; align-items:center; gap:14px; margin-bottom:36px; }
+  .step { background:var(--card); border:2px solid var(--line); border-radius:14px; padding:18px 20px; font-size:21px; font-weight:600; min-width:150px; text-align:center; }
+  .step small { display:block; font-weight:400; color:var(--muted); font-size:15px; margin-top:4px; }
+  .arrow { font-size:30px; color:var(--accent); }
+  .out { display:flex; gap:16px; }
+  .pill { background:var(--card); border:2px solid var(--line); border-radius:999px; padding:12px 22px; font-size:20px; }
+  .pill b.ok { color:var(--ok); } .pill b.warn { color:var(--warn); }
+  .foot { margin-top:auto; display:flex; justify-content:space-between; font-size:19px; color:var(--muted); }
+  .sub { margin-bottom:30px; } .flow { margin-bottom:22px; }
+  table.res { margin-top:24px; border-collapse:collapse; background:var(--card); border:2px solid var(--line); border-radius:14px; overflow:hidden; font-size:18px; width:100%; }
+  table.res th, table.res td { padding:10px 14px; text-align:left; border-bottom:1px solid var(--line); }
+  table.res th { color:var(--muted); font-weight:600; font-size:15px; text-transform:uppercase; letter-spacing:.04em; }
+  td.ok { color:var(--ok); font-weight:650; } td.warn { color:var(--warn); font-weight:650; }
+  .shot { margin-top:22px; height:250px; overflow:hidden; border:2px solid var(--line); border-radius:14px; background:var(--card); }
+  .shot img { width:100%; display:block; }
+  [data-v]:not([data-v~="__V__"]) { display:none !important; }
+</style></head>
+<body><div class="wrap">
+
+  <div data-v="n8n">
+    <div class="kicker">n8n automation</div>
+    <h1>Stop typing invoices into spreadsheets</h1>
+    <p class="sub">Your manual process, automated, tested and documented, with a review step for anything unclear.</p>
+    <div class="flow">
+      <div class="step">Invoice PDFs<small>email or folder</small></div><div class="arrow">→</div>
+      <div class="step">Extract text<small>n8n</small></div><div class="arrow">→</div>
+      <div class="step">Read fields<small>supplier, date, VAT, total</small></div><div class="arrow">→</div>
+      <div class="step">Spreadsheet<small>Excel, Sheets, Airtable</small></div>
+    </div>
+    <div class="out"><div class="pill"><b class="ok">3 OK</b> written to invoices.xlsx</div><div class="pill"><b class="warn">1 to review</b>: no VAT line</div></div>
+    <table class="res">
+      <tr><th>supplier</th><th>number</th><th>date</th><th>net €</th><th>VAT €</th><th>total €</th><th>status</th></tr>
+      <tr><td>Northwind Building Supplies</td><td>NW-2026-0141</td><td>2026-10-02</td><td>493.00</td><td>103.53</td><td>596.53</td><td class="ok">OK</td></tr>
+      <tr><td>Blue Harbor Electrical</td><td>BH-88213</td><td>2026-10-05</td><td>507.00</td><td>106.47</td><td>613.47</td><td class="ok">OK</td></tr>
+      <tr><td>Copperline Plumbing Co</td><td>CP-5521</td><td>2026-10-09</td><td>266.60</td><td>26.66</td><td>293.26</td><td class="ok">OK</td></tr>
+      <tr><td>Granite &amp; Stone Depot</td><td>GSD-0907</td><td>2026-10-14</td><td>675.00</td><td>—</td><td>675.00</td><td class="warn">NEEDS REVIEW</td></tr>
+    </table>
+  </div>
+
+  <div data-v="data">
+    <div class="kicker">Web data · n8n · Apify</div>
+    <h1>Website data to a clean dashboard</h1>
+    <p class="sub">Public data collected on schedule, cleaned, deduplicated and ready to use. No copy and paste.</p>
+    <div class="flow">
+      <div class="step">Public pages<small>catalogues, prices</small></div><div class="arrow">→</div>
+      <div class="step">Collect<small>n8n or Apify</small></div><div class="arrow">→</div>
+      <div class="step">Clean<small>types, duplicates</small></div><div class="arrow">→</div>
+      <div class="step">Table + dashboard<small>CSV, Sheets, DB</small></div>
+    </div>
+    <div class="out"><div class="pill"><b class="ok">100 records</b> from 5 pages</div><div class="pill"><b class="ok">0 duplicates</b></div><div class="pill">KPIs and best-value list</div></div>
+    <div class="shot"><img src="../demo-02-web-data-dashboard/example-output/dashboard.png" alt=""></div>
+  </div>
+
+  <div data-v="agent">
+    <div class="kicker">AI agent · n8n · human approval</div>
+    <h1>An inbox that sorts itself, and asks first</h1>
+    <p class="sub">Every email classified, summarised and answered as a draft. A person approves before anything is sent.</p>
+    <div class="flow">
+      <div class="step">Inbox<small>quotes, invoices, complaints</small></div><div class="arrow">→</div>
+      <div class="step">AI model<small>category, urgency, draft</small></div><div class="arrow">→</div>
+      <div class="step">Rules in code<small>urgent → a person</small></div><div class="arrow">→</div>
+      <div class="step">Approval list<small>nothing sent</small></div>
+    </div>
+    <div class="out"><div class="pill"><b class="ok">8 of 8</b> categories right</div><div class="pill"><b class="warn">3</b> sent to a person</div><div class="pill"><b class="ok">0</b> emails sent without approval</div></div>
+    <table class="res">
+      <tr><th>subject</th><th>category</th><th>urgency</th><th>needs a person</th></tr>
+      <tr><td>URGENT water leak from the ceiling</td><td>complaint_or_incident</td><td class="warn">high</td><td class="warn">yes</td></tr>
+      <tr><td>Quote for bathroom renovation</td><td>quote_request</td><td>normal</td><td>no</td></tr>
+      <tr><td>Invoice NW-2026-0141</td><td>supplier_invoice</td><td>normal</td><td>no</td></tr>
+      <tr><td>Double your leads in 30 days!!!</td><td>spam_or_marketing</td><td>low</td><td>no</td></tr>
+    </table>
+  </div>
+
+  <div class="foot"><span>Diego Díaz · civil engineer, close to 10 years in construction and operations</span><span>Synthetic or public practice data</span></div>
+</div></body></html>
